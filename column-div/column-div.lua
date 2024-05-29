@@ -18,13 +18,21 @@ Usage:                          classname   attributes
             See README.md for details
 
 Note:       You don't need to include multicol latex package to get balanced
-            columns in latex or pdf. The filter does it.
+            columns in latex or pdf. The filter does it.
 
             I tried to use well known html or latex parameter.
             Even if lua doen't like hyphens like in column-count.
 
 --]]
 local List = require 'pandoc.List'
+
+local function blocksToLatex(blocks)
+  local latex = {}
+  for _, block in ipairs(blocks) do
+    table.insert(latex, pandoc.write(pandoc.Pandoc({block}), 'latex'))
+  end
+  return table.concat(latex, '')
+end
 
 function Div(div)
   local options = ''
@@ -96,20 +104,25 @@ function Div(div)
 
     elseif div.classes:includes('columns') then
        --save the parskip value and open set an mbox
-      begin_env = List:new{pandoc.RawBlock('tex', '\\setlength{\\currentparskip}{\\parskip}\\mbox{')}
+      begin_env = List:new{pandoc.RawBlock('tex', '\\setlength{\\currentparskip}{\\parskip}{')}
       end_env = List:new{pandoc.RawBlock('tex', '}')}
 
       -- attribute 'noskip' avoid space before and after the box
       opt = div.attributes.noskip
       if opt then
-	div.attributes.noskip = nil    -- consume attribute
+        div.attributes.noskip = nil    -- consume attribute
       else
-	begin_env = List:new{pandoc.RawBlock('tex', '\\bigskip' )}
+        begin_env = List:new{pandoc.RawBlock('tex', '\\bigskip' )}
                     .. begin_env
         end_env = end_env .. List:new{pandoc.RawBlock('tex', '\\bigskip')}
       end
-
-      returned_list = begin_env .. div.content .. end_env
+      -- concat the minipages, since returning plain list of them will insert newlines
+      -- which doesn't actually place minipages side by side
+      local minipages = {}
+      for _, block in ipairs(div.content) do
+          table.insert(minipages, pandoc.write(pandoc.Pandoc({block}), 'latex'))
+      end
+      returned_list = begin_env .. (List:new{pandoc.RawBlock('tex', table.concat(minipages, ''))}) .. end_env
 
     else
       -- other environments ex: multicols
@@ -123,7 +136,7 @@ function Div(div)
         end_env = List:new{pandoc.RawBlock('tex', '\\end{' .. env .. '}')}
 
       else
-	env = nil -- we don't allow random environment
+        env = nil -- we don't allow random environment
       end
       if env then -- write environment and content
         returned_list = begin_env .. div.content .. end_env
